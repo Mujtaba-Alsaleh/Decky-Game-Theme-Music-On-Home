@@ -1,115 +1,224 @@
 import {
-  ButtonItem,
+  DialogButton,
+  findSP,
+  Focusable,
   PanelSection,
   PanelSectionRow,
-  Navigation,
   staticClasses
 } from "@decky/ui";
-import {
-  addEventListener,
-  removeEventListener,
-  callable,
-  definePlugin,
-  toaster,
-  // routerHook
-} from "@decky/api"
-import { useState } from "react";
-import { FaShip } from "react-icons/fa";
+import { definePlugin, callable } from "@decky/api";
+import { useEffect, useState } from "react";
+import { FaMusic } from "react-icons/fa";
+import localforage from "localforage";
 
-// import logo from "../assets/logo.png";
+// --- Setup localForage ---
+localforage.config({ name: "game-theme-music-cache" });
+type GameThemeMusicCache = {
+  videoId?: string;
+  volume?: number;
+};
 
-// This function calls the python function "add", which takes in two numbers and returns their sum (as a number)
-// Note the type annotations:
-//  the first one: [first: number, second: number] is for the arguments
-//  the second one: number is for the return value
-const add = callable<[first: number, second: number], number>("add");
+// --- Logging ---
+function log(msg: string) {
+  console.log("[GTM]", msg);
+}
 
-// This function calls the python function "start_timer", which takes in no arguments and returns nothing.
-// It starts a (python) timer which eventually emits the event 'timer_event'
-const startTimer = callable<[], void>("start_timer");
+// --- Backend callable ---
+const _resolveMusicPath = callable<[string], string | null>("resolve_music_path");
+const resolveMusicPath = async (videoId: string): Promise<string | null> => {
+  if (audioUrlCache[videoId]) {
+    return audioUrlCache[videoId];
+  }
 
-function Content() {
-  const [result, setResult] = useState<number | undefined>();
+  try {
+    const result = await _resolveMusicPath(videoId);
+    if (result) {
+      audioUrlCache[videoId] = result;
+    }
+    return result ?? null;
+  } catch (e) {
+    log(`Backend error: ${e}`);
+    return null;
+  }
+};
 
-  const onClick = async () => {
-    const result = await add(Math.random(), Math.random());
-    setResult(result);
-  };
+const _game_theme_music_install_check = callable<any,boolean>("game_theme_music_install_check");
 
+// --- Audio ---
+const audio = new Audio();
+audio.volume = 1.0;
+audio.loop = true;
+let currentlyPlayingAppID = "";
+let audioIsPlaying = false;
+const audioUrlCache: Record<string, string> = {};
+
+
+function playAudio(path: string) {
+  audio.pause();
+  audio.src = path;
+  audio.play().then(() => 
+    {
+      log("Audio playing"); 
+      audioIsPlaying = true
+    }
+    ).catch(err => log(`Audio error: ${err}`));
+}
+
+function stopAudio() {
+  audio.pause();
+  audio.currentTime = 0;
+  audio.removeAttribute("src");
+  audio.load();
+  currentlyPlayingAppID = ""
+  audioIsPlaying = false;
+  log("Audio stopped");
+}
+
+async function getVideoIdFromAppId(appId: string): Promise<string | null> {
+  if(appId == currentlyPlayingAppID)
+    return null;
+  try {
+    const cache = await localforage.getItem<GameThemeMusicCache>(appId);
+    return cache?.videoId ?? null;
+  } catch (e) {
+    log(`Cache error: ${e}`);
+    return null;
+  }
+}
+
+
+let hoverEnabled = true;
+// --- Main UI ---
+const Content = () => {
+  const [GTMInstalled,setGTMinstalled] = useState(false)
+  const [enabled,setEnabled] = useState(hoverEnabled);
+
+  useEffect(() => {
+    _game_theme_music_install_check().then(setGTMinstalled);
+  }, []);
+
+const toggleHover = () =>
+{
+  hoverEnabled = !hoverEnabled;
+  setEnabled(hoverEnabled);
+  stopAudio();
+  log(`Hover playback ${hoverEnabled ? "enabled" : "disabled"}`)
+}
   return (
-    <PanelSection title="Panel Section">
+    <PanelSection title="Game Theme Music for Home page">
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={onClick}
-        >
-          {result ?? "Add two numbers via Python"}
-        </ButtonItem>
+        <Focusable>
+          <DialogButton onClick={toggleHover}>🎮 Enable Plugin Home Detection: {enabled? "On ✅" : "Off ❌"}</DialogButton>
+        </Focusable>
       </PanelSectionRow>
+      <Focusable>
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={() => startTimer()}
-        >
-          {"Start Python timer"}
-        </ButtonItem>
+        <DialogButton onClick={()=>stopAudio()}>
+          🔇 FORCE STOP AUDIO
+        </DialogButton>
       </PanelSectionRow>
+      </Focusable>
+      <Focusable>
+            <div>
+            <div id="gtm-log-box" style={{
+              whiteSpace: "pre-wrap",
+              background: "#111",
+              color: "#0f0",
+              padding: "8px",
+              height: "150px",
+              overflowY: "auto",
+              fontFamily: "monospace",
+              fontSize: "0.75rem",
+              border: "1px solid #333",
+              borderRadius: "6px",
+              marginTop: "10px"
+            }}>
+              {
+              GTMInstalled?
+              "Game Theme Music is installed ✅\n"+
+              "Download theme music for your games using Game Theme Music plugin and enjoy listening to them in Home page"
+              :
+              "Game Theme Music is not installed ❌\n"+
+              "Please Install Game Theme Music first, download some music to your games and enjoy listening to them in Home page"
+            }
 
-      {/* <PanelSectionRow>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <img src={logo} />
-        </div>
-      </PanelSectionRow> */}
-
-      {/*<PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={() => {
-            Navigation.Navigate("/decky-plugin-test");
-            Navigation.CloseSideMenus();
-          }}
-        >
-          Router
-        </ButtonItem>
-      </PanelSectionRow>*/}
+            </div>
+          </div>
+      </Focusable>
     </PanelSection>
   );
 };
 
+// --- Plugin export ---
 export default definePlugin(() => {
-  console.log("Template plugin initializing, this is called once on frontend startup")
+  log("Plugin loaded.");
+  const sp = findSP();
+  let cleanup = () => { };
 
-  // serverApi.routerHook.addRoute("/decky-plugin-test", DeckyPluginRouterTest, {
-  //   exact: true,
-  // });
+  if (sp && sp.addEventListener) {
+    const handleFocusIn = async (event: FocusEvent) => {
+      if (!hoverEnabled) 
+        return;
 
-  // Add an event listener to the "timer_event" event from the backend
-  const listener = addEventListener<[
-    test1: string,
-    test2: boolean,
-    test3: number
-  ]>("timer_event", (test1, test2, test3) => {
-    console.log("Template got timer_event with:", test1, test2, test3)
-    toaster.toast({
-      title: "template got timer_event",
-      body: `${test1}, ${test2}, ${test3}`
-    });
-  });
+      if(!window.location.href.includes("/library/home"))
+      {
+        if(audioIsPlaying)
+          stopAudio();
+        return;
+      }
+      const active = event.target as Element | null;
+      const tile = active?.closest?.("[data-id]");
+      if (!tile) return;
 
+      const appId = tile.getAttribute("data-id");
+      if (!appId)
+        return log("No AppID found on focused tile");;
+      
+
+      log(`Focused tile with AppID: ${appId}`);
+      if(appId == currentlyPlayingAppID)
+        return log("changed appid is the same for playing appid");
+
+      const videoId = await getVideoIdFromAppId(appId);
+      if (!videoId) 
+      {
+        if(audioIsPlaying)
+          stopAudio();
+        return log("No videoId in cache");
+      }
+      const path = await resolveMusicPath(videoId);
+      if (!path) 
+      {
+        if(audioIsPlaying)
+          stopAudio();
+        return log("No music path returned")
+      };
+      currentlyPlayingAppID = appId;
+      stopAudio(); // in case something is already playing
+      playAudio(path);
+    };
+
+    sp.addEventListener("focusin", handleFocusIn);
+    log("Attached focusin listener");
+
+    cleanup = () => {
+      sp.removeEventListener("focusin", handleFocusIn);
+      stopAudio();
+      log("Removed focusin listener");
+    };
+  } else {
+    log("SP root not found or does not support event listener");
+  }
   return {
-    // The name shown in various decky menus
-    name: "Test Plugin",
-    // The element displayed at the top of your plugin's menu
-    titleView: <div className={staticClasses.Title}>Decky Example Plugin</div>,
-    // The content of your plugin's menu
+    name: "Game Theme Music for home",
+    title: <div className={staticClasses.Title}>Game Theme Music hooker plugin to play in Home</div>,
     content: <Content />,
-    // The icon displayed in the plugin list
-    icon: <FaShip />,
-    // The function triggered when your plugin unloads
+    icon: <FaMusic />,
     onDismount() {
-      console.log("Unloading")
-      removeEventListener("timer_event", listener);
-      // serverApi.routerHook.removeRoute("/decky-plugin-test");
-    },
+      cleanup();
+      currentlyPlayingAppID = ""
+      Object.keys(audioUrlCache).forEach(k=>delete audioUrlCache[k]);
+      log("Cleared audio urls cache");
+    }
   };
 });
