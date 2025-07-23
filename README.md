@@ -1,4 +1,4 @@
-# DeckyLoader-Plugin-Palia-NPC-Gift-Tracker
+# DeckyLoader-Plugin-Game-Theme-Music-On-Home
 DeckyLoader plugin to listen to you game theme music on home page.  
 If you have any problem related to the plugin kindly open an issue.  
 More information will be added later.  
