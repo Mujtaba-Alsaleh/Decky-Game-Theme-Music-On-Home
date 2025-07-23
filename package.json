@@ -1,7 +1,7 @@
 {
-  "name": "deckyloader-audio-hook-plugin",
+  "name": "decky-game-theme-music-on-home",
   "version": "0.0.1",
-  "description": "Decky plugin to make SDH-GameThemeMusic run in Home",
+  "description": "Decky plugin to make SDH GameThemeMusic run in Home",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
