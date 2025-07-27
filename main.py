@@ -3,25 +3,23 @@ import decky # type: ignore
 import mimetypes
 import base64
 import json
+import subprocess
+import os
 
 MUSIC_DIR = Path.home() / "homebrew/data/SDH-GameThemeMusic/music"
 LOADER_SETTINGS_JSON = Path.home() / "homebrew/settings/loader.json"
-
-audio_cache: dict[str,str] = {}
+CONVERTED_DIR = MUSIC_DIR / "converted"
 
 class Plugin:
     async def _main(self):
         decky.logger.info("Plugin initialized!")
         decky.logger.info(MUSIC_DIR)
+        if not CONVERTED_DIR.exists():
+            os.makedirs(CONVERTED_DIR)
         pass
 
     async def _unload(self):
         decky.logger.info("Plugin unloaded!")
-        try:
-            audio_cache.clear()
-            decky.logger.info("clearing audio_cache upon unloading")
-        except:
-            decky.logger.info("Error clearing audio_cache upon unloading")
         pass
 
     async def _uninstall(self):
@@ -39,24 +37,21 @@ class Plugin:
         return data["pluginOrder"].__contains__("Game Theme Music")
 
     async def resolve_music_path(self, video_id: str) -> str | None:
-        if video_id in audio_cache:
-            return audio_cache[video_id]
-
-        decky.logger.info(f"[AudioHook] Resolving path for video_id: {video_id}")
-        if not MUSIC_DIR.exists():
-            decky.logger.info(f"[AudioHook] Music dir does not exist: {MUSIC_DIR}")
-            return None
-
         for file in MUSIC_DIR.iterdir():
-            if video_id in file.name:
-                decky.logger.info(f"[AudioHook] Found matching file: {file}")
-                with open(file, "rb") as f:
-                    encoded = base64.b64encode(f.read()).decode("utf-8")
-                    mime_type = mimetypes.guess_type(file.name)[0] or "audio/webm"
-                    data_url = f"data:{mime_type};base64,{encoded}"
-                    audio_cache[video_id] = data_url
-                    decky.logger.info(f"[AudioHook] Returning data URL for: {file.name}")
-                    return [data_url]
+            if video_id in file.name and file.suffix == ".webm":
+                converted = CONVERTED_DIR / (video_id + ".opus")
+                if not converted.exists():
+                    self.convert_to_opus(file, converted)
 
-        decky.logger.info(f"[AudioHook] No file found for video_id: {video_id}")
+                with open(converted, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("utf-8")
+                    return f"data:audio/ogg;base64,{encoded}"
+
         return None
+    
+    def convert_to_opus(self,source: Path, target: Path):
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(source),
+            "-c:a", "libopus", "-b:a", "32k",
+            str(target)
+        ], check=True)

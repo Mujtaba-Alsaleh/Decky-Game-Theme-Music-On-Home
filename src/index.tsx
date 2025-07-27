@@ -54,7 +54,8 @@ const audioUrlCache: Record<string, string> = {};
 
 
 function playAudio(path: string) {
-  audio.pause();
+  if(audioIsPlaying)
+    audio.pause();
   audio.src = path;
   audio.play().then(() => 
     {
@@ -65,7 +66,8 @@ function playAudio(path: string) {
 }
 
 function stopAudio() {
-  audio.pause();
+  if(audioIsPlaying)
+    audio.pause();
   audio.currentTime = 0;
   audio.removeAttribute("src");
   audio.load();
@@ -162,8 +164,9 @@ export default definePlugin(() => {
 
       if(!window.location.href.includes("/library/home"))
       {
-        if(audioIsPlaying)
-          stopAudio();
+        stopAudio();
+        //Clear cache upon leaving home as user might change game theme or trying to start a game
+        Object.keys(audioUrlCache).forEach(k=>delete audioUrlCache[k]);
         return;
       }
       const active = event.target as Element | null;
@@ -182,15 +185,13 @@ export default definePlugin(() => {
       const videoId = await getVideoIdFromAppId(appId);
       if (!videoId) 
       {
-        if(audioIsPlaying)
-          stopAudio();
+        stopAudio();
         return log("No videoId in cache");
       }
       const path = await resolveMusicPath(videoId);
       if (!path) 
       {
-        if(audioIsPlaying)
-          stopAudio();
+        stopAudio();
         return log("No music path returned")
       };
       currentlyPlayingAppID = appId;
