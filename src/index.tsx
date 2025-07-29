@@ -1,4 +1,5 @@
 import {
+  ButtonItem,
   DialogButton,
   findSP,
   Focusable,
@@ -24,6 +25,9 @@ function log(msg: string) {
 }
 
 // --- Backend callable ---
+const _changeConvertQuality = callable<any,  null>("change_convert_quality");
+const _deleteConvertedFiles = callable<any,  null>("delete_converted_audio");
+const _convertedFilesCount = callable<any,  boolean>("get_converted_count");
 const _resolveMusicPath = callable<[string], string | null>("resolve_music_path");
 const resolveMusicPath = async (videoId: string): Promise<string | null> => {
   if (audioUrlCache[videoId]) {
@@ -94,10 +98,34 @@ let hoverEnabled = true;
 const Content = () => {
   const [GTMInstalled,setGTMinstalled] = useState(false)
   const [enabled,setEnabled] = useState(hoverEnabled);
+  const convertQualityList = ["24k","32k","64k"];
+  const [qualitydropactive,setQualityDropActive] = useState(false);
+  const [canDeleteConverted,setCanDeleteConverted] = useState(false);
 
   useEffect(() => {
     _game_theme_music_install_check().then(setGTMinstalled);
   }, []);
+
+    useEffect(() => {
+    _convertedFilesCount().then(setCanDeleteConverted);
+  }, []);
+
+  const handleconvertQualityButtonClick = (quality: string) => {
+    // Call the parent handler to handle the backend logic
+    _changeConvertQuality(quality)
+    
+    // Hide the quality buttons after one is clicked
+    setQualityDropActive(false);
+  };
+
+  const HandleDeleteConverted = () => 
+  {
+      if(!canDeleteConverted)
+        return;
+
+      _deleteConvertedFiles();
+      setCanDeleteConverted(false)
+  }
 
 const toggleHover = () =>
 {
@@ -147,6 +175,52 @@ const toggleHover = () =>
             </div>
           </div>
       </Focusable>
+      
+      <PanelSectionRow>
+
+      <Focusable>
+        <PanelSectionRow>
+          <DialogButton onClick={() => setQualityDropActive(!qualitydropactive)}>
+            {qualitydropactive ? 'Hide Quality Options' : 'Show Quality Options'}
+          </DialogButton>
+        </PanelSectionRow>
+        </Focusable>
+      </PanelSectionRow>
+
+      <Focusable>
+      {qualitydropactive && (
+        <PanelSectionRow>
+          {convertQualityList.map((quality, index) => (
+            <ButtonItem key={index} layout="below" onClick={() => handleconvertQualityButtonClick(quality)}>
+              <span>{quality}</span>
+            </ButtonItem>
+          ))}
+          <div>
+          recommended quality is 32k for balance audio quality and file size.
+        </div>
+        </PanelSectionRow>
+      )}
+      </Focusable>
+      <PanelSectionRow>
+      <Focusable>
+      {canDeleteConverted && (
+        <PanelSectionRow>
+          <DialogButton onClick={HandleDeleteConverted}>
+            Delete Converted Files
+          </DialogButton>
+        </PanelSectionRow>
+      )}
+      </Focusable>
+      </PanelSectionRow>
+
+      <PanelSectionRow>
+        {!canDeleteConverted &&(
+          <div>
+            No Cache/Converted Files yet
+          </div>
+        )}
+      </PanelSectionRow>
+
     </PanelSection>
   );
 };
