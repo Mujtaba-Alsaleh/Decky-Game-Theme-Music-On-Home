@@ -50,8 +50,10 @@ class Plugin:
         return None
     
     def convert_to_opus(self,source: Path, target: Path):
+        clean_env = os.environ.copy()
+        clean_env["LD_LIBRARY_PATH"] = ""
         subprocess.run([
             "ffmpeg", "-y", "-i", str(source),
             "-c:a", "libopus", "-b:a", "32k",
             str(target)
-        ], check=True)
+        ], env=clean_env,check=True)
